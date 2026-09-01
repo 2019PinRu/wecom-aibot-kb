@@ -20,6 +20,7 @@ reply:
 aggregate:
   window_seconds: 30  # 多消息聚合时间窗（秒）
   max_queue: 3        # 单个用户与机器人同时交互的消息数上限（企微硬限制为 3）
+  mention_targets: [] # @ 目标列表（机器人名称/aibotid），为空时回退到机器人名
 
 # 检索应答引擎
 retriever:

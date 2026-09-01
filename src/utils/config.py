@@ -23,7 +23,7 @@ DEFAULT_CONFIG = {
         "prefix": "[AI自动回复]：",
         "no_answer": "抱歉，暂时没有找到相关答案，已记录您的问题，管理员会尽快补充。",
     },
-    "aggregate": {"window_seconds": 30, "max_queue": 3},
+    "aggregate": {"window_seconds": 30, "max_queue": 3, "mention_targets": []},
     "retriever": {"score_threshold": 0.3, "top_k": 5},
     "storage": {"db_path": "data/kb.db", "log_dir": "logs"},
     "web": {"host": "0.0.0.0", "port": 8080},
