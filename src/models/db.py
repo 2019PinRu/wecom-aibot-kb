@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS pending_questions (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_questions(status);
 
+-- 手动/导入问答表（kb_docs 手动条目的持久化来源，同步重建后据此回灌）
+CREATE TABLE IF NOT EXISTS manual_qa (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_manual_qa_source ON manual_qa(source);
+
 -- 系统配置表（Web 动态配置）
 CREATE TABLE IF NOT EXISTS sys_config (
     key TEXT PRIMARY KEY,
