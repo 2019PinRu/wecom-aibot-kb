@@ -1,0 +1,7 @@
+# wecom-aibot-kb 依赖清单
+# 仅允许以下依赖，如需新增必须先与用户确认
+fastapi
+uvicorn
+httpx
+pyyaml
+jinja2
