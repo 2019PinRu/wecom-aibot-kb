@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 from kb.git_sync import sync_and_ingest
 from models.db import execute, query
-from retriever.fts5 import build_match_query
+from retriever.fts5 import build_match_query, segment_bigrams
 from utils.config import Config
 
 logger = logging.getLogger(__name__)
@@ -127,17 +127,28 @@ def create_router(config: Config, db_path: str) -> APIRouter:
 
     @router.post("/pending/{item_id}/resolve")
     async def pending_resolve(item_id: int, answer: str = Form("")):
-        """补充答案并标记为已处理。"""
+        """补充答案并标记为已处理，同时入库 kb_docs 供后续检索命中。"""
+        answer_text = answer.strip()
+        if not answer_text:
+            return _redirect(f"/pending?msg=答案不能为空")
+        # 查询问题原文，用于同步写入知识库
+        rows = query(
+            db_path, "SELECT question FROM pending_questions WHERE id = ?", (item_id,)
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="问题不存在")
+        question = rows[0]["question"]
         sql = (
             "UPDATE pending_questions SET status='resolved', answer=?, "
             "updated_at=datetime('now','localtime') WHERE id=?"
         )
         try:
-            execute(db_path, sql, (answer.strip(), item_id))
+            execute(db_path, sql, (answer_text, item_id))
+            _ingest_pending_answer(db_path, question, answer_text, item_id)
         except sqlite3.Error as exc:
-            logger.error("更新待补充问题失败: %s", exc)
-            raise HTTPException(status_code=500, detail="更新失败")
-        return _redirect(f"/pending?status=resolved&msg=问题 #{item_id} 已处理")
+            logger.error("处理待补充问题失败: %s", exc)
+            raise HTTPException(status_code=500, detail="处理失败")
+        return _redirect(f"/pending?status=resolved&msg=问题 #{item_id} 已处理并入库")
 
     @router.get("/config")
     async def config_page(request: Request):
@@ -164,6 +175,28 @@ def create_router(config: Config, db_path: str) -> APIRouter:
         return _redirect(f"/config?msg=已保存 {saved} 项，重启进程后生效")
 
     return router
+
+
+def _ingest_pending_answer(db_path: str, question: str, answer: str, item_id: int) -> None:
+    """把补充的问题与答案写入 kb_docs，使后续相同问题能检索命中。
+
+    参数：
+        db_path: 数据库文件路径。
+        question: 待补充问题原文。
+        answer: 管理员补充的答案。
+        item_id: 待补充问题行 id，用于生成唯一 doc_id 防止重复入库。
+    """
+    # 索引文本包含问题与答案，保证按问题提问时能命中
+    index_text = f"{question} {answer}"
+    content = " ".join(segment_bigrams(index_text))
+    doc_id = f"pending:{item_id}"
+    # 先删后插，避免重复提交 resolve 导致重复知识片段
+    execute(db_path, "DELETE FROM kb_docs WHERE doc_id = ?", (doc_id,))
+    sql = (
+        "INSERT INTO kb_docs (title, content, source, doc_id, raw_content) "
+        "VALUES (?, ?, ?, ?, ?)"
+    )
+    execute(db_path, sql, (question, content, "pending", doc_id, answer))
 
 
 def _render(request: Request, template_name: str, context: dict):
