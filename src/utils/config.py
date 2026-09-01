@@ -11,7 +11,14 @@ logger = logging.getLogger(__name__)
 
 # 默认配置：字段缺失时兜底，保证服务可启动
 DEFAULT_CONFIG = {
-    "wecom": {"bot_id": "", "bot_secret": ""},
+    "wecom": {
+        "bot_id": "",
+        "bot_secret": "",
+        "ws_url": "wss://openws.work.weixin.qq.com",
+        "heartbeat_seconds": 30,
+        "reconnect_max_seconds": 30,
+        "dedup_cache_size": 10000,
+    },
     "reply": {
         "prefix": "[AI自动回复]：",
         "no_answer": "抱歉，暂时没有找到相关答案，已记录您的问题，管理员会尽快补充。",

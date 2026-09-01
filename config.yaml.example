@@ -6,6 +6,10 @@
 wecom:
   bot_id: ""          # 智能机器人 BotID（建议用环境变量 WECOM_BOT_ID 注入）
   bot_secret: ""      # 智能机器人 Secret（建议用环境变量 WECOM_BOT_SECRET 注入）
+  ws_url: "wss://openws.work.weixin.qq.com"  # 长连接 WebSocket 地址（官方固定）
+  heartbeat_seconds: 30   # 心跳间隔（秒）
+  reconnect_max_seconds: 30  # 断线重连退避封顶（秒）
+  dedup_cache_size: 10000    # msgid 去重缓存上限
 
 # 回复设置
 reply:
