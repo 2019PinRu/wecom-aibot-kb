@@ -6,16 +6,22 @@ import sqlite3
 
 logger = logging.getLogger(__name__)
 
-# 建表 SQL：知识库 FTS5 表、待补充问题表、系统配置表（幂等）
-_SCHEMA_SQL = """
--- 知识库文档表（FTS5 全文检索虚拟表）
-CREATE VIRTUAL TABLE IF NOT EXISTS kb_docs USING fts5(
-    title,
+# kb_docs 建表语句（FTS5 虚拟表）：content 存 bigram 切分索引文本，原文存 raw_content
+_KB_DOCS_DDL = """
+CREATE VIRTUAL TABLE kb_docs USING fts5(
+    title UNINDEXED,
     content,
-    source,
-    doc_id,
+    source UNINDEXED,
+    doc_id UNINDEXED,
+    raw_content UNINDEXED,
     tokenize = 'unicode61'
 );
+"""
+
+# 建表 SQL：知识库 FTS5 表、待补充问题表、系统配置表（幂等）
+_SCHEMA_SQL = f"""
+-- 知识库文档表（FTS5 全文检索虚拟表，含原文列）
+{_KB_DOCS_DDL}
 
 -- 待补充问题表
 CREATE TABLE IF NOT EXISTS pending_questions (
@@ -38,6 +44,16 @@ CREATE TABLE IF NOT EXISTS sys_config (
     updated_at TEXT
 );
 """
+
+
+def _migrate_kb_docs(conn: sqlite3.Connection) -> None:
+    """检测 kb_docs 表结构，缺失 raw_content 列时重建（数据由下次同步全量重建）。"""
+    columns = [row["name"] for row in conn.execute("PRAGMA table_info(kb_docs)").fetchall()]
+    if "raw_content" in columns:
+        return
+    logger.warning("检测到 kb_docs 旧表结构，重建以新增 raw_content 原文列")
+    conn.execute("DROP TABLE IF EXISTS kb_docs")
+    conn.execute(_KB_DOCS_DDL)
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:
@@ -71,6 +87,7 @@ def init_db(db_path: str) -> None:
     try:
         with conn:
             conn.executescript(_SCHEMA_SQL)
+            _migrate_kb_docs(conn)
         logger.info("数据库初始化完成: %s", db_path)
     except sqlite3.Error as exc:
         logger.error("数据库初始化失败: %s", exc)
