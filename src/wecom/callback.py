@@ -126,7 +126,10 @@ class CallbackClient:
             self._auth_ok.clear()
             self._subscribe_req_id = ""
             try:
-                async with websockets.connect(ws_url) as ws:
+                # 关闭 websockets 内置协议层 ping，改用应用层 aibot ping 命令保活。
+                # 企微服务器不回应当前库默认的每条 20 秒协议 ping，会触发
+                # keepalive ping timeout / incorrect masking 断开。
+                async with websockets.connect(ws_url, ping_interval=None) as ws:
                     self._ws = ws
                     self._reply_client.bind(ws)
                     await self._subscribe(ws)
