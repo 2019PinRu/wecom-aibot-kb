@@ -147,6 +147,9 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# 项目配置（含密钥，禁止提交）
+config.yaml
+
 # Environments
 .env
 .envrc

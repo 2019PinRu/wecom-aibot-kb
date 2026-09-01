@@ -1,0 +1,33 @@
+# wecom-aibot-kb 配置文件模板
+# 复制本文件为 config.yaml 后按需修改；真实 config.yaml 已被 gitignore，禁止提交
+# 密钥类配置建议使用环境变量 WECOM_BOT_ID / WECOM_BOT_SECRET，优先级高于本文件
+
+# 企微智能机器人接入
+wecom:
+  bot_id: ""          # 智能机器人 BotID（建议用环境变量 WECOM_BOT_ID 注入）
+  bot_secret: ""      # 智能机器人 Secret（建议用环境变量 WECOM_BOT_SECRET 注入）
+
+# 回复设置
+reply:
+  prefix: "[AI自动回复]："                     # 每条回复前拼接的前缀
+  no_answer: "抱歉，暂时没有找到相关答案，已记录您的问题，管理员会尽快补充。"  # 无结果话术
+
+# 群聊聚合引擎
+aggregate:
+  window_seconds: 30  # 多消息聚合时间窗（秒）
+  max_queue: 3        # 单个用户与机器人同时交互的消息数上限（企微硬限制为 3）
+
+# 检索应答引擎
+retriever:
+  score_threshold: 0.3  # 检索置信度阈值，低于视为无结果
+  top_k: 5              # 返回候选条数
+
+# 本地存储
+storage:
+  db_path: "data/kb.db"   # SQLite 数据库文件路径
+  log_dir: "logs"         # 日志目录
+
+# Web 服务
+web:
+  host: "0.0.0.0"
+  port: 8080
