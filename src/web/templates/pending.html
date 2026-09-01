@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}待补充问题 - AIBot 知识库{% endblock %}
+{% block content %}
+<h2 class="mb-3">待补充问题</h2>
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item">
+    <a class="nav-link {% if status == 'pending' %}active{% endif %}" href="/pending?status=pending">待处理</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if status == 'resolved' %}active{% endif %}" href="/pending?status=resolved">已处理</a>
+  </li>
+</ul>
+
+{% for row in rows %}
+<div class="card mb-3 shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between">
+      <h6 class="card-title">#{{ row.id }}</h6>
+      <small class="text-muted">{{ row.created_at }}</small>
+    </div>
+    <p class="card-text">{{ row.question }}</p>
+    <p class="text-muted small mb-2">
+      提问人：{{ row.asker or "-" }} | 会话：{{ row.chattype or "-" }} | 群：{{ row.chatid or "-" }}
+    </p>
+    {% if status == 'pending' %}
+    <form method="post" action="/pending/{{ row.id }}/resolve">
+      <div class="input-group">
+        <input type="text" name="answer" class="form-control" placeholder="补充答案后标记已处理" required>
+        <button type="submit" class="btn btn-primary">提交答案</button>
+      </div>
+    </form>
+    {% else %}
+    <div class="alert alert-success mb-0">答案：{{ row.answer or "-" }}</div>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<p class="text-muted">暂无数据</p>
+{% endfor %}
+{% endblock %}

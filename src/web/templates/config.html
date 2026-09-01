@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}系统参数 - AIBot 知识库{% endblock %}
+{% block content %}
+<h2 class="mb-3">系统参数</h2>
+<p class="text-muted">以下配置保存到 sys_config 表，作为运行时覆盖层叠加在 config.yaml 之上，重启进程后生效。</p>
+<form method="post" action="/config/save">
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>配置项</th>
+          <th>说明</th>
+          <th style="width: 40%;">当前值</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td><code>{{ item.key }}</code></td>
+          <td>{{ item.label }}</td>
+          <td><input type="text" name="{{ item.key }}" value="{{ item.value }}" class="form-control"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button type="submit" class="btn btn-primary">保存配置</button>
+</form>
+{% endblock %}
