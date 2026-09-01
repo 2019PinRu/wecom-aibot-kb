@@ -10,9 +10,11 @@ import yaml
 # 日志器
 logger = logging.getLogger(__name__)
 
-# 项目根目录：本文件位于 src/utils/ 下，向上两级即项目根。
+# 项目根目录：本文件位于 src/utils/config.py。
+#   向上一级 = src/utils，向上两级 = src，向上三级 = 项目根。
 # 从任意子目录启动（如 cd src && uvicorn main:app）时，相对路径统一基于项目根解析。
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SRC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(_SRC_DIR)
 
 
 def resolve_project_path(path: str) -> str:
