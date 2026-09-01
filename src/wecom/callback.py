@@ -88,6 +88,9 @@ class CallbackClient:
         self._reply_client = reply_client
         self._deduper = MsgDeduper(config.get("wecom.dedup_cache_size", 10000))
         self._stop_event = asyncio.Event()
+        # 订阅成功事件：认证通过后才启动心跳（对齐官方 SDK 流程）
+        self._auth_ok = asyncio.Event()
+        self._subscribe_req_id = ""
         self._task: asyncio.Task | None = None
         self._ws = None
 
@@ -120,6 +123,8 @@ class CallbackClient:
             return
         reconnect_max = self._config.get("wecom.reconnect_max_seconds", 30)
         while not self._stop_event.is_set():
+            self._auth_ok.clear()
+            self._subscribe_req_id = ""
             try:
                 async with websockets.connect(ws_url) as ws:
                     self._ws = ws
@@ -139,8 +144,10 @@ class CallbackClient:
                 backoff = min(backoff * 2, reconnect_max)
 
     async def _subscribe(self, ws) -> None:
-        """发送订阅请求 aibot_subscribe 完成身份校验。"""
-        req_id = uuid.uuid4().hex
+        """发送订阅请求 aibot_subscribe 完成身份校验（req_id 带命令前缀便于识别响应）。"""
+        # 官方 SDK 约定：订阅响应的 req_id 以 aibot_subscribe 前缀开头，用于识别认证回包
+        req_id = f"{CMD_SUBSCRIBE}_{uuid.uuid4().hex}"
+        self._subscribe_req_id = req_id
         frame = {
             "cmd": CMD_SUBSCRIBE,
             "headers": {"req_id": req_id},
@@ -163,12 +170,19 @@ class CallbackClient:
             heartbeat_task.cancel()
 
     async def _heartbeat_loop(self, ws) -> None:
-        """周期发送 ping 心跳，官方建议间隔 30 秒。"""
+        """认证成功后周期发送带 headers 的 ping 心跳（官方建议间隔 30 秒）。"""
+        # 等待订阅成功回包后再启动心跳（对齐官方 SDK：认证通过才开始保活）
+        await self._auth_ok.wait()
         interval = self._config.get("wecom.heartbeat_seconds", 30)
         while not self._stop_event.is_set():
             await asyncio.sleep(interval)
             try:
-                await ws.send(json.dumps({"cmd": CMD_PING}))
+                await ws.send(
+                    json.dumps(
+                        {"cmd": CMD_PING, "headers": {"req_id": f"ping_{uuid.uuid4().hex}"}},
+                        ensure_ascii=False,
+                    )
+                )
                 logger.debug("心跳已发送")
             except Exception as exc:
                 logger.error("心跳发送失败: %s", exc)
@@ -194,8 +208,35 @@ class CallbackClient:
         elif cmd == CMD_EVENT_CALLBACK:
             event = body.get("event") or {}
             logger.info("收到事件回调: %s", event.get("eventtype", "unknown"))
+        elif cmd is None:
+            # 官方协议：订阅响应/心跳 ack/回复回执均为无 cmd 帧，靠 headers.req_id 前缀识别
+            await self._handle_response_frame(frame)
         else:
             logger.debug("收到未处理帧 cmd=%s", cmd)
+
+    async def _handle_response_frame(self, frame: dict) -> None:
+        """处理无 cmd 的响应帧：订阅响应、心跳 ack 与回复回执。
+
+        参数：
+            frame: 响应帧字典。
+        """
+        req_id = (frame.get("headers") or {}).get("req_id") or ""
+        errcode = frame.get("errcode")
+        if req_id == self._subscribe_req_id or req_id.startswith(CMD_SUBSCRIBE):
+            if errcode == 0:
+                self._auth_ok.set()
+                logger.info("【鉴权】订阅成功，机器人接入正常: %s", frame.get("errmsg", "ok"))
+            else:
+                logger.error(
+                    "【鉴权】订阅失败 errcode=%s errmsg=%s，请检查 bot_id / secret 配置",
+                    errcode,
+                    frame.get("errmsg"),
+                )
+            return
+        if req_id.startswith("ping_"):
+            logger.debug("收到心跳 ack")
+            return
+        logger.info("收到回执帧: %s", _format_frame_payload(frame))
 
     async def _handle_msg_callback(self, body: dict, req_id: str) -> None:
         """处理消息回调：msgid 排重后转 dispatcher 分流。

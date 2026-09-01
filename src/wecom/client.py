@@ -108,16 +108,21 @@ class ReplyClient:
         }
         return await self._send_frame(CMD_RESPOND_MSG, req_id, body)
 
-    async def push_text(self, chatid: str, content: str) -> bool:
-        """主动向会话推送文本消息（aibot_send_msg）。
+    async def push_markdown(self, chatid: str, content: str, chat_type: int = 0) -> bool:
+        """主动向会话推送 markdown 消息（aibot_send_msg，官方仅支持 markdown/template_card）。
 
         参数：
-            chatid: 目标会话 id。
-            content: 推送文本内容。
+            chatid: 目标会话 id（单聊填 userid，群聊填 chatid）。
+            content: 推送内容（markdown 格式）。
+            chat_type: 会话类型，1 单聊 / 2 群聊 / 0 兼容（官方建议显式指定）。
 
         返回：
             True 发送成功；False 失败。
         """
-        # 待验证：aibot_send_msg body 完整字段结构以官方「主动推送消息」文档为准
-        body = {"chatid": chatid, "msgtype": "text", "text": {"content": content}}
+        body = {
+            "chatid": chatid,
+            "chat_type": chat_type,
+            "msgtype": "markdown",
+            "markdown": {"content": content},
+        }
         return await self._send_frame(CMD_SEND_MSG, uuid.uuid4().hex, body)
