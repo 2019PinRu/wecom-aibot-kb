@@ -10,6 +10,24 @@ import yaml
 # 日志器
 logger = logging.getLogger(__name__)
 
+# 项目根目录：本文件位于 src/utils/ 下，向上两级即项目根。
+# 从任意子目录启动（如 cd src && uvicorn main:app）时，相对路径统一基于项目根解析。
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def resolve_project_path(path: str) -> str:
+    """相对路径基于项目根目录解析为绝对路径，绝对路径原样返回。
+
+    参数：
+        path: 文件或目录路径。
+
+    返回：
+        解析后的绝对路径。
+    """
+    if not path or os.path.isabs(path):
+        return path
+    return os.path.join(PROJECT_ROOT, path)
+
 # 默认配置：字段缺失时兜底，保证服务可启动
 DEFAULT_CONFIG = {
     "wecom": {
@@ -110,13 +128,16 @@ def load_config(config_path: str | None = None) -> dict:
     """加载配置文件并与默认配置合并，返回完整配置字典。
 
     参数：
-        config_path: 配置文件路径；为 None 时使用默认路径 config.yaml。
+        config_path: 配置文件路径；为 None 时使用环境变量 CONFIG_PATH 或项目根 config.yaml。
+            相对路径统一基于项目根目录解析，与启动目录无关。
 
     返回：
         合并后的配置字典。
     """
     config = deepcopy(DEFAULT_CONFIG)
-    path = config_path or "config.yaml"
+    if config_path is None:
+        config_path = os.environ.get("CONFIG_PATH") or "config.yaml"
+    path = resolve_project_path(config_path)
     try:
         with open(path, encoding="utf-8") as f:
             file_config = yaml.safe_load(f) or {}

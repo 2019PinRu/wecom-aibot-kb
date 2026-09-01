@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from aggregator.buffer import MessageBuffer
 from models.db import init_db
 from retriever.responder import Responder
-from utils.config import Config
+from utils.config import Config, resolve_project_path
 from wecom.callback import CallbackClient
 from wecom.client import ReplyClient
 from wecom.dispatcher import Dispatcher
@@ -35,7 +35,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
         装配完成的 FastAPI 应用。
     """
     config = Config(config_path)
-    db_path = config.get("storage.db_path", "data/kb.db")
+    # 数据库路径基于项目根解析，避免从 src 启动时落到 src/data 下
+    db_path = resolve_project_path(config.get("storage.db_path", "data/kb.db"))
     init_db(db_path)
     config.overlay_db(db_path)
 

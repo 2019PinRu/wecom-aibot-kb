@@ -8,6 +8,7 @@ import subprocess
 
 from models.db import get_connection
 from retriever.fts5 import segment_bigrams
+from utils.config import resolve_project_path
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,9 @@ def sync_repo(config) -> str | None:
         MD 文档所在目录路径；同步失败或未配置时返回 None。
     """
     repo_url = config.get("kb.repo_url", "") or ""
-    repo_path = config.get("kb.repo_path", "") or ""
-    work_dir = config.get("kb.work_dir", "data/kb_repo")
+    # 本地目录与仓库工作目录基于项目根解析，与启动目录无关
+    repo_path = resolve_project_path(config.get("kb.repo_path", "") or "")
+    work_dir = resolve_project_path(config.get("kb.work_dir", "data/kb_repo"))
     try:
         if repo_url:
             return work_dir if _ensure_repo(repo_url, config.get("kb.repo_branch", "main"), work_dir) else None
