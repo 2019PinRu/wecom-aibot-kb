@@ -7,9 +7,9 @@ import sqlite3
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from kb.git_sync import sync_and_ingest
+from kb.git_sync import build_pending_doc, sync_and_ingest
 from models.db import execute, query
-from retriever.fts5 import build_match_query, segment_bigrams
+from retriever.fts5 import build_match_query
 from utils.config import Config
 
 logger = logging.getLogger(__name__)
@@ -186,17 +186,19 @@ def _ingest_pending_answer(db_path: str, question: str, answer: str, item_id: in
         answer: 管理员补充的答案。
         item_id: 待补充问题行 id，用于生成唯一 doc_id 防止重复入库。
     """
-    # 索引文本包含问题与答案，保证按问题提问时能命中
-    index_text = f"{question} {answer}"
-    content = " ".join(segment_bigrams(index_text))
-    doc_id = f"pending:{item_id}"
+    # 复用 kb 模块统一片段构造，保证 pending 入库格式一致
+    doc = build_pending_doc(question, answer, item_id)
     # 先删后插，避免重复提交 resolve 导致重复知识片段
-    execute(db_path, "DELETE FROM kb_docs WHERE doc_id = ?", (doc_id,))
+    execute(db_path, "DELETE FROM kb_docs WHERE doc_id = ?", (doc["doc_id"],))
     sql = (
         "INSERT INTO kb_docs (title, content, source, doc_id, raw_content) "
         "VALUES (?, ?, ?, ?, ?)"
     )
-    execute(db_path, sql, (question, content, "pending", doc_id, answer))
+    execute(
+        db_path,
+        sql,
+        (doc["title"], doc["content"], doc["source"], doc["doc_id"], doc["raw_content"]),
+    )
 
 
 def _render(request: Request, template_name: str, context: dict):

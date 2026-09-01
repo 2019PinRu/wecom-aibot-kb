@@ -6,7 +6,7 @@ import os
 import sqlite3
 import subprocess
 
-from models.db import get_connection
+from models.db import get_connection, query
 from retriever.fts5 import segment_bigrams
 from utils.config import resolve_project_path
 
@@ -221,6 +221,48 @@ def ingest_docs(db_path: str, docs: list[dict]) -> int:
         conn.close()
 
 
+def build_pending_doc(question: str, answer: str, item_id: int) -> dict:
+    """构造待补充问答知识片段字典，供单条写入与全量回灌共用。
+
+    参数：
+        question: 待补充问题原文。
+        answer: 管理员补充的答案。
+        item_id: 待补充问题行 id，用于生成唯一 doc_id。
+
+    返回：
+        知识片段字典（title/content/source/doc_id/raw_content）。
+    """
+    index_text = f"{question} {answer}"
+    return {
+        "title": question,
+        "content": " ".join(segment_bigrams(index_text)),
+        "source": "pending",
+        "doc_id": f"pending:{item_id}",
+        "raw_content": answer,
+    }
+
+
+def load_pending_docs(db_path: str) -> list[dict]:
+    """读取全部已答待补充问题，生成知识片段列表（同步重建后回灌用）。
+
+    参数：
+        db_path: 数据库文件路径。
+
+    返回：
+        pending 知识片段字典列表；查询失败返回空列表。
+    """
+    try:
+        rows = query(
+            db_path,
+            "SELECT id, question, answer FROM pending_questions "
+            "WHERE status='resolved' AND answer IS NOT NULL AND TRIM(answer) != ''",
+        )
+    except sqlite3.Error as exc:
+        logger.error("读取已答待补充问题失败: %s", exc)
+        return []
+    return [build_pending_doc(r["question"], r["answer"], r["id"]) for r in rows]
+
+
 def sync_and_ingest(config) -> int:
     """顶层入口：同步 → 扫描 → 切分 → 入库，返回入库片段数。
 
@@ -243,6 +285,15 @@ def sync_and_ingest(config) -> int:
     docs = []
     for rel in files:
         docs.extend(build_docs(repo_dir, rel, chunk_size, chunk_overlap))
-    count = ingest_docs(config.get("storage.db_path", "data/kb.db"), docs)
-    logger.info("知识库同步完成，入库 %d 个片段", count)
+    # 数据路径基于项目根解析，与启动目录无关
+    db_path = resolve_project_path(config.get("storage.db_path", "data/kb.db"))
+    # 全量重建会清空 kb_docs，重建后回灌 pending 已答记录，防止补充答案丢失
+    pending_docs = load_pending_docs(db_path)
+    docs.extend(pending_docs)
+    count = ingest_docs(db_path, docs)
+    logger.info(
+        "知识库同步完成，入库 %d 个片段（pending 补充答案 %d 条）",
+        count,
+        len(pending_docs),
+    )
     return count
