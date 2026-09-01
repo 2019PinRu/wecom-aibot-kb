@@ -79,5 +79,21 @@ def search(db_path: str, question: str, top_k: int, score_threshold: float) -> l
         logger.error("FTS5 检索失败: %s | 表达式: %s", exc, match_expr)
         return []
     hits = [row for row in rows if row["score"] >= score_threshold]
-    logger.info("检索命中 %d 条（阈值 %.2f）: %s", len(hits), score_threshold, question)
+    if not hits and rows:
+        # bm25 绝对值随语料规模漂移：小语料下查询词命中全部文档时 IDF 较低，
+        # -bm25 得分≤0，任何正数阈值都会误杀唯一正确命中，故兜底取 top1
+        logger.info(
+            "候选 %d 条全部低于阈值 %.2f，兜底返回 top1（score=%.4f）",
+            len(rows),
+            score_threshold,
+            rows[0]["score"],
+        )
+        hits = rows[:1]
+    logger.info(
+        "检索命中 %d/%d 条（阈值 %.2f）: %s",
+        len(hits),
+        len(rows),
+        score_threshold,
+        question,
+    )
     return hits
