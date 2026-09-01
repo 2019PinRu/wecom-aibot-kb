@@ -18,6 +18,23 @@ CMD_MSG_CALLBACK = "aibot_msg_callback"
 CMD_EVENT_CALLBACK = "aibot_event_callback"
 CMD_PING = "ping"
 
+# 日志展示的帧内容长度上限，防止超长消息刷屏
+LOG_FRAME_LIMIT = 300
+
+
+def _format_frame_payload(frame: dict, limit: int = LOG_FRAME_LIMIT) -> str:
+    """将回调帧转 JSON 字符串并按长度截断，用于日志展示。
+
+    参数：
+        frame: 回调帧字典。
+        limit: 截断长度。
+
+    返回：
+        截断后的 JSON 字符串。
+    """
+    text = json.dumps(frame, ensure_ascii=False)
+    return text if len(text) <= limit else text[:limit] + "..."
+
 
 class MsgDeduper:
     """基于有界内存的 msgid 排重器，防止网络重试导致重复处理。"""
@@ -171,6 +188,7 @@ class CallbackClient:
         cmd = frame.get("cmd")
         body = frame.get("body") or {}
         req_id = (frame.get("headers") or {}).get("req_id") or ""
+        logger.info("【收】%s", _format_frame_payload(frame))
         if cmd == CMD_MSG_CALLBACK:
             await self._handle_msg_callback(body, req_id)
         elif cmd == CMD_EVENT_CALLBACK:

@@ -11,6 +11,23 @@ logger = logging.getLogger(__name__)
 CMD_RESPOND_MSG = "aibot_respond_msg"
 CMD_SEND_MSG = "aibot_send_msg"
 
+# 日志展示的帧内容长度上限，防止超长消息刷屏
+LOG_FRAME_LIMIT = 300
+
+
+def _format_frame_payload(frame: dict, limit: int = LOG_FRAME_LIMIT) -> str:
+    """将发送帧转 JSON 字符串并按长度截断，用于日志展示。
+
+    参数：
+        frame: 发送帧字典。
+        limit: 截断长度。
+
+    返回：
+        截断后的 JSON 字符串。
+    """
+    text = json.dumps(frame, ensure_ascii=False)
+    return text if len(text) <= limit else text[:limit] + "..."
+
 
 class ReplyClient:
     """企微回复客户端：通过长连接发送被动回复与主动推送。"""
@@ -64,9 +81,11 @@ class ReplyClient:
             logger.error("长连接未就绪，无法发送 %s", cmd)
             return False
         frame = {"cmd": cmd, "headers": {"req_id": req_id}, "body": body}
+        payload = json.dumps(frame, ensure_ascii=False)
         try:
             async with self._send_lock:
-                await self._ws.send(json.dumps(frame, ensure_ascii=False))
+                await self._ws.send(payload)
+            logger.info("【发】%s", _format_frame_payload(frame))
             return True
         except Exception as exc:
             logger.error("发送 %s 失败: %s", cmd, exc)
