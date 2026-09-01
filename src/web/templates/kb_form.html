@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ form_title }} - AIBot 知识库{% endblock %}
+{% block content %}
+<h2 class="mb-3">{{ form_title }}</h2>
+<form method="post" action="{{ form_action }}">
+  <div class="mb-3">
+    <label class="form-label">问题 / 标题</label>
+    <input type="text" name="title" value="{{ title_value }}" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">答案 / 内容</label>
+    <textarea name="answer" rows="8" class="form-control" required>{{ answer_value }}</textarea>
+  </div>
+  <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
+  <a href="/kb" class="btn btn-outline-secondary">返回</a>
+</form>
+{% endblock %}

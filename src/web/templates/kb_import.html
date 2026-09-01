@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}批量导入 - AIBot 知识库{% endblock %}
+{% block content %}
+<h2 class="mb-3">批量导入问答</h2>
+<p class="text-muted">
+  每行一条问答，格式为 <code>问题,答案</code>（逗号分隔两列）。首行可为表头
+  <code>question,answer</code>；含逗号或换行的内容请用英文双引号包裹。示例：
+</p>
+<pre class="bg-light p-3 border rounded">如何请假,请提交 OA 请假申请，审批通过后休假
+报销流程,填写报销单，附发票后提交财务审核
+G治理规定,详见《公司治理规定》第一条</pre>
+<form method="post" action="/kb/import">
+  <div class="mb-3">
+    <textarea name="csv_text" rows="15" class="form-control font-monospace" required
+              placeholder="问题,答案&#10;如何请假,请提交 OA 请假申请&#10;报销流程,填写报销单后提交财务"></textarea>
+  </div>
+  <button type="submit" class="btn btn-primary">导入</button>
+  <a href="/kb" class="btn btn-outline-secondary">返回</a>
+</form>
+{% endblock %}

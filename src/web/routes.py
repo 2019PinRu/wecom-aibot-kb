@@ -7,7 +7,13 @@ import sqlite3
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from kb.git_sync import build_pending_doc, sync_and_ingest
+from kb.git_sync import (
+    insert_manual_qa,
+    insert_qa,
+    parse_faq_csv,
+    sync_and_ingest,
+    update_manual_qa,
+)
 from models.db import execute, query
 from retriever.fts5 import build_match_query
 from utils.config import Config
@@ -102,10 +108,103 @@ def create_router(config: Config, db_path: str) -> APIRouter:
         count = await asyncio.to_thread(sync_and_ingest, config)
         return _redirect(f"/kb?msg=同步完成，入库 {count} 个片段")
 
+    @router.get("/kb/new")
+    async def kb_new_form(request: Request):
+        """新增问答表单页。"""
+        context = {
+            "request": request,
+            "form_action": "/kb/new",
+            "form_title": "新增问答",
+            "submit_label": "保存",
+            "title_value": "",
+            "answer_value": "",
+        }
+        return _render(request, "kb_form.html", context)
+
+    @router.post("/kb/new")
+    async def kb_new_save(title: str = Form(""), answer: str = Form("")):
+        """保存新增问答：写入 manual_qa 并立即入库 kb_docs。"""
+        title_text = title.strip()
+        answer_text = answer.strip()
+        if not title_text or not answer_text:
+            return _redirect("/kb/new?msg=问题与答案均不能为空")
+        try:
+            row_id = insert_manual_qa(db_path, title_text, answer_text, "manual")
+            insert_qa(db_path, title_text, answer_text, "manual", f"manual:{row_id}")
+        except sqlite3.Error as exc:
+            logger.error("新增问答失败: %s", exc)
+            raise HTTPException(status_code=500, detail="新增失败")
+        return _redirect(f"/kb?msg=已新增问答#{row_id}")
+
+    @router.get("/kb/import")
+    async def kb_import_form(request: Request):
+        """批量导入问答表单页。"""
+        return _render(request, "kb_import.html", {"request": request})
+
+    @router.post("/kb/import")
+    async def kb_import_save(csv_text: str = Form("")):
+        """解析 CSV 文本并批量导入问答。"""
+        items = parse_faq_csv(csv_text)
+        if not items:
+            return _redirect("/kb/import?msg=未解析到有效问答，请检查 CSV 格式")
+        try:
+            for item in items:
+                row_id = insert_manual_qa(db_path, item["title"], item["answer"], "import")
+                insert_qa(db_path, item["title"], item["answer"], "import", f"import:{row_id}")
+        except sqlite3.Error as exc:
+            logger.error("批量导入问答失败: %s", exc)
+            raise HTTPException(status_code=500, detail="导入失败")
+        return _redirect(f"/kb?msg=已批量导入 {len(items)} 条问答")
+
+    @router.get("/kb/{rowid}/edit")
+    async def kb_edit_form(rowid: int, request: Request):
+        """编辑问答表单页，回填当前问题与答案。"""
+        rows = query(
+            db_path,
+            "SELECT rowid, title, raw_content FROM kb_docs WHERE rowid = ?",
+            (rowid,),
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="片段不存在")
+        context = {
+            "request": request,
+            "form_action": f"/kb/{rowid}/edit",
+            "form_title": f"编辑问答 #{rowid}",
+            "submit_label": "保存修改",
+            "title_value": rows[0]["title"],
+            "answer_value": rows[0]["raw_content"],
+        }
+        return _render(request, "kb_form.html", context)
+
+    @router.post("/kb/{rowid}/edit")
+    async def kb_edit_save(rowid: int, title: str = Form(""), answer: str = Form("")):
+        """保存编辑：同步更新 manual_qa（若来源为手动/导入）并重建 kb_docs 行。"""
+        title_text = title.strip()
+        answer_text = answer.strip()
+        if not title_text or not answer_text:
+            return _redirect(f"/kb/{rowid}/edit?msg=问题与答案均不能为空")
+        rows = query(db_path, "SELECT source, doc_id FROM kb_docs WHERE rowid = ?", (rowid,))
+        if not rows:
+            raise HTTPException(status_code=404, detail="片段不存在")
+        source = rows[0]["source"]
+        doc_id = rows[0]["doc_id"]
+        try:
+            if source in ("manual", "import"):
+                update_manual_qa(db_path, _parse_manual_id(doc_id), title_text, answer_text)
+            execute(db_path, "DELETE FROM kb_docs WHERE rowid = ?", (rowid,))
+            insert_qa(db_path, title_text, answer_text, source, doc_id)
+        except sqlite3.Error as exc:
+            logger.error("编辑问答失败: %s", exc)
+            raise HTTPException(status_code=500, detail="编辑失败")
+        return _redirect("/kb?msg=已更新片段")
+
     @router.post("/kb/{rowid}/delete")
     async def kb_delete(rowid: int):
-        """删除单条知识片段。"""
+        """删除单条知识片段，手动/导入来源同步删除持久化记录防止重构复活。"""
+        rows = query(db_path, "SELECT source, doc_id FROM kb_docs WHERE rowid = ?", (rowid,))
         try:
+            if rows and rows[0]["source"] in ("manual", "import"):
+                execute(db_path, "DELETE FROM manual_qa WHERE id = ?", (_parse_manual_id(rows[0]["doc_id"]),))
             execute(db_path, "DELETE FROM kb_docs WHERE rowid = ?", (rowid,))
         except sqlite3.Error as exc:
             logger.error("删除知识片段失败: %s", exc)
@@ -187,18 +286,12 @@ def _ingest_pending_answer(db_path: str, question: str, answer: str, item_id: in
         item_id: 待补充问题行 id，用于生成唯一 doc_id 防止重复入库。
     """
     # 复用 kb 模块统一片段构造，保证 pending 入库格式一致
-    doc = build_pending_doc(question, answer, item_id)
-    # 先删后插，避免重复提交 resolve 导致重复知识片段
-    execute(db_path, "DELETE FROM kb_docs WHERE doc_id = ?", (doc["doc_id"],))
-    sql = (
-        "INSERT INTO kb_docs (title, content, source, doc_id, raw_content) "
-        "VALUES (?, ?, ?, ?, ?)"
-    )
-    execute(
-        db_path,
-        sql,
-        (doc["title"], doc["content"], doc["source"], doc["doc_id"], doc["raw_content"]),
-    )
+    insert_qa(db_path, question, answer, "pending", f"pending:{item_id}")
+
+
+def _parse_manual_id(doc_id: str) -> int:
+    """从手动/导入片段的 doc_id（source:id）提取 manual_qa 持久化表行 id。"""
+    return int(doc_id.split(":", 1)[1])
 
 
 def _render(request: Request, template_name: str, context: dict):
