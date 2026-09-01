@@ -25,6 +25,16 @@ DEFAULT_CONFIG = {
     },
     "aggregate": {"window_seconds": 30, "max_queue": 3, "mention_targets": []},
     "retriever": {"score_threshold": 0.3, "top_k": 5},
+    "kb": {
+        "repo_url": "",
+        "repo_branch": "main",
+        "repo_path": "",
+        "work_dir": "data/kb_repo",
+        "chunk_size": 500,
+        "chunk_overlap": 50,
+        "include_patterns": ["*.md"],
+        "exclude_patterns": ["README.md"],
+    },
     "storage": {"db_path": "data/kb.db", "log_dir": "logs"},
     "web": {"host": "0.0.0.0", "port": 8080},
 }

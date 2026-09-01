@@ -27,6 +27,17 @@ retriever:
   score_threshold: 0.3  # 检索置信度阈值，低于视为无结果
   top_k: 5              # 返回候选条数
 
+# 知识入库流水线
+kb:
+  repo_url: ""                    # Git 仓库地址，为空则用 repo_path 本地目录
+  repo_branch: "main"             # 同步分支
+  repo_path: ""                   # 本地 MD 文档目录（repo_url 为空时使用）
+  work_dir: "data/kb_repo"        # 仓库克隆/工作目录
+  chunk_size: 500                 # 切分片段字符数
+  chunk_overlap: 50               # 片段尾部重叠字符数
+  include_patterns: ["*.md"]      # 入库文件匹配模式
+  exclude_patterns: ["README.md"] # 排除文件
+
 # 本地存储
 storage:
   db_path: "data/kb.db"   # SQLite 数据库文件路径
