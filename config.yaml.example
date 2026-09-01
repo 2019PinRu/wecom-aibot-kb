@@ -24,7 +24,7 @@ aggregate:
 
 # 检索应答引擎
 retriever:
-  score_threshold: 0.3  # 检索置信度阈值，低于视为无结果
+  score_threshold: 0.1  # 检索置信度阈值，低于视为无结果（bigram+bm25 得分偏低，0.3 会误杀有效命中）
   top_k: 5              # 返回候选条数
 
 # 知识入库流水线

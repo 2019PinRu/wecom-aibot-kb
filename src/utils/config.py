@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
         "no_answer": "抱歉，暂时没有找到相关答案，已记录您的问题，管理员会尽快补充。",
     },
     "aggregate": {"window_seconds": 30, "max_queue": 3, "mention_targets": []},
-    "retriever": {"score_threshold": 0.3, "top_k": 5},
+    "retriever": {"score_threshold": 0.1, "top_k": 5},
     "kb": {
         "repo_url": "",
         "repo_branch": "main",
