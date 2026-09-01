@@ -62,7 +62,7 @@ class Responder:
             self._record_pending(question, chattype, meta)
             content = self._config.get("reply.no_answer", "抱歉，暂时没有找到相关答案。")
         else:
-            content = hits[0]["content"] or hits[0]["title"]
+            content = hits[0]["raw_content"] or hits[0]["title"]
         text = format_reply(self._config.get("reply.prefix", "[AI自动回复]："), content, chattype, asker)
         await self._reply_client.reply(req_id, text)
 

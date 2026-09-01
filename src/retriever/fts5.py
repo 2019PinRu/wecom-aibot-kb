@@ -62,14 +62,14 @@ def search(db_path: str, question: str, top_k: int, score_threshold: float) -> l
         score_threshold: 置信度阈值，低于视为无结果。
 
     返回：
-        命中候选字典列表（含 title/content/source/doc_id/score）。
+        命中候选字典列表（含 title/content/source/doc_id/raw_content/score）。
     """
     match_expr = build_match_query(question)
     if not match_expr:
         logger.info("问题无有效检索词，跳过检索: %s", question)
         return []
     sql = (
-        "SELECT title, content, source, doc_id, -bm25(kb_docs) AS score "
+        "SELECT title, content, source, doc_id, raw_content, -bm25(kb_docs) AS score "
         "FROM kb_docs WHERE kb_docs MATCH ? "
         "ORDER BY bm25(kb_docs) LIMIT ?"
     )
