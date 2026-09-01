@@ -18,11 +18,9 @@ CREATE VIRTUAL TABLE kb_docs USING fts5(
 );
 """
 
-# 建表 SQL：知识库 FTS5 表、待补充问题表、系统配置表（幂等）
-_SCHEMA_SQL = f"""
--- 知识库文档表（FTS5 全文检索虚拟表，含原文列）
-{_KB_DOCS_DDL}
-
+# 建表 SQL：待补充问题表、系统配置表（幂等）
+# kb_docs 虚拟表不支持 IF NOT EXISTS，改由 _create_kb_docs_if_missing 按存在性创建
+_SCHEMA_SQL = """
 -- 待补充问题表
 CREATE TABLE IF NOT EXISTS pending_questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +42,15 @@ CREATE TABLE IF NOT EXISTS sys_config (
     updated_at TEXT
 );
 """
+
+
+def _create_kb_docs_if_missing(conn: sqlite3.Connection) -> None:
+    """kb_docs 不存在时创建 FTS5 虚拟表（CREATE VIRTUAL TABLE 不支持 IF NOT EXISTS）。"""
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='kb_docs'"
+    ).fetchone()
+    if row is None:
+        conn.execute(_KB_DOCS_DDL)
 
 
 def _migrate_kb_docs(conn: sqlite3.Connection) -> None:
@@ -87,6 +94,7 @@ def init_db(db_path: str) -> None:
     try:
         with conn:
             conn.executescript(_SCHEMA_SQL)
+            _create_kb_docs_if_missing(conn)
             _migrate_kb_docs(conn)
         logger.info("数据库初始化完成: %s", db_path)
     except sqlite3.Error as exc:
