@@ -2,6 +2,7 @@
 """配置加载模块：读取 config.yaml 与默认配置合并，密钥支持环境变量覆盖。"""
 import logging
 import os
+import sqlite3
 from copy import deepcopy
 
 import yaml
@@ -82,6 +83,29 @@ def _get_by_path(config: dict, key_path: str, default=None):
     return node
 
 
+def _parse_value(key_path: str, raw: str):
+    """按默认配置类型转换 sys_config 字符串值。
+
+    参数：
+        key_path: 配置点分路径。
+        raw: 数据库中的字符串值。
+
+    返回：
+        转换后的值；无法转换或路径无默认类型时原样返回字符串。
+    """
+    default_value = _get_by_path(DEFAULT_CONFIG, key_path)
+    try:
+        if isinstance(default_value, bool):
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+        if isinstance(default_value, int):
+            return int(raw.strip())
+        if isinstance(default_value, float):
+            return float(raw.strip())
+    except (TypeError, ValueError):
+        logger.warning("配置值转换失败，原样使用: %s=%s", key_path, raw)
+    return raw
+
+
 def load_config(config_path: str | None = None) -> dict:
     """加载配置文件并与默认配置合并，返回完整配置字典。
 
@@ -116,6 +140,26 @@ class Config:
     def get(self, key_path: str, default=None):
         """读取配置项，键不存在时返回默认值。"""
         return _get_by_path(self._data, key_path, default)
+
+    def overlay_db(self, db_path: str) -> None:
+        """叠加 sys_config 动态配置到内存配置字典。
+
+        参数：
+            db_path: SQLite 数据库文件路径。
+
+        返回：
+            无。
+        """
+        from models.db import query
+
+        try:
+            rows = query(db_path, "SELECT key, value FROM sys_config")
+        except sqlite3.Error as exc:
+            logger.error("读取 sys_config 动态配置失败: %s", exc)
+            return
+        for row in rows:
+            _set_by_path(self._data, row["key"], _parse_value(row["key"], row["value"]))
+        logger.info("已叠加 %d 条 sys_config 动态配置", len(rows))
 
     @property
     def data(self) -> dict:
