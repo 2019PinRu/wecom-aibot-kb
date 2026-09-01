@@ -6,3 +6,4 @@ httpx
 pyyaml
 jinja2
 websockets
+python-multipart
